@@ -36,9 +36,11 @@ return [
     ],
 
     'fonnte' => [
-        'token' => env('FONNTE_TOKEN'),
-        'group_id' => env('FONNTE_GROUP_ID'),
-        'admin_group_id' => env('FONNTE_ADMIN_GROUP_ID'),
-    ],
+    'token' => env('FONNTE_TOKEN'),
+    'group_id' => env('FONNTE_GROUP_ID'),
+    'admin_group_id' => env('FONNTE_ADMIN_GROUP_ID'),
+    'admin_wa' => env('FONNTE_ADMIN_WA'),
+    'group_wa' => env('FONNTE_GROUP_WA'),
+],
 
 ];

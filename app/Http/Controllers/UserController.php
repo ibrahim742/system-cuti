@@ -5,26 +5,38 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
-    public function index()
+    /** Daftar akun + modal edit */
+    public function index(Request $request)
     {
         $users = User::orderBy('role')->orderBy('name')->paginate(10);
-        return view('super-admin.users.index', compact('users'));
+
+        // Ambil user yang akan diedit jika ada ?edit=ID (opsional, untuk fallback)
+        $editUser = null;
+        if ($request->filled('edit')) {
+            $editUser = User::find($request->edit);
+        }
+
+        return view('super-admin.users.index', compact('users', 'editUser'));
     }
 
+    /** Form tambah akun (halaman terpisah) */
     public function create()
     {
         return view('super-admin.users.create');
     }
 
+    /** Simpan akun baru */
     public function store(Request $request)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
+            'no_wa' => 'nullable|string|max:20',
             'password' => 'required|string|min:6',
             'role' => 'required|in:karyawan,admin,super_admin',
             'jatah_cuti_tahunan' => 'required|integer|min:0',
@@ -39,16 +51,19 @@ class UserController extends Controller
             ->with('success', 'Akun berhasil ditambahkan.');
     }
 
+    /** (Fallback) Form edit halaman terpisah — tidak dipakai jika modal aktif */
     public function edit(User $user)
     {
         return view('super-admin.users.edit', compact('user'));
     }
 
+    /** Update akun (dipakai oleh modal edit) */
     public function update(Request $request, User $user)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
+            'no_wa' => 'nullable|string|max:20',
             'password' => 'nullable|string|min:6',
             'role' => 'required|in:karyawan,admin,super_admin',
             'jatah_cuti_tahunan' => 'required|integer|min:0',
@@ -67,10 +82,15 @@ class UserController extends Controller
             ->with('success', 'Akun berhasil diperbarui.');
     }
 
+    /** Hapus akun */
     public function destroy(User $user)
     {
         if ($user->id === auth()->id()) {
             return back()->withErrors(['msg' => 'Anda tidak bisa menghapus akun sendiri.']);
+        }
+
+        if ($user->foto_profile && Storage::disk('public')->exists($user->foto_profile)) {
+            Storage::disk('public')->delete($user->foto_profile);
         }
 
         $user->delete();

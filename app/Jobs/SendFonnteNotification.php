@@ -20,8 +20,9 @@ class SendFonnteNotification implements ShouldQueue
 
     public function handle(): void
     {
+        // app/Jobs/SendFonnteNotification.php
         Http::withHeaders([
-            'Authorization' => config('services.fonnte.token'),
+            'Authorization' => \App\Models\Setting::get('fonnte_token') ?? config('services.fonnte.token'),
         ])->post('https://api.fonnte.com/send', [
             'target'  => $this->target,
             'message' => $this->message,
