@@ -98,4 +98,14 @@ class UserController extends Controller
         return redirect()->route('super-admin.users.index')
             ->with('success', 'Akun berhasil dihapus.');
     }
+
+    public function unlock(User $user)
+    {
+        $user->update([
+            'login_attempts' => 0,
+            'is_locked' => false,
+        ]);
+
+        return back()->with('success', "Akun {$user->name} berhasil dibuka kuncinya.");
+    }
 }

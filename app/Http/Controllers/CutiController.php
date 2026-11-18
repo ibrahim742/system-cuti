@@ -12,30 +12,120 @@ use Illuminate\Support\Facades\DB;
 class CutiController extends Controller
 {
     /** Dashboard Karyawan */
-    public function dashboardKaryawan()
+    public function dashboardKaryawan(Request $request)
     {
         $user = auth()->user();
 
+        // Filter bulan (default: bulan ini)
+        $bulan = $request->input('bulan', now()->month);
+        $tahun = $request->input('tahun', now()->year);
+
+        // Filter tanggal (opsional)
+        $tanggal = $request->input('tanggal');
+
+        // Query dasar riwayat
+        $query = $user->cutis();
+
+        if ($tanggal) {
+            // Jika filter tanggal spesifik dipilih
+            $query->whereDate('tanggal_mulai', $tanggal);
+        } else {
+            // Jika filter bulanan
+            $query->whereMonth('tanggal_mulai', $bulan)
+                ->whereYear('tanggal_mulai', $tahun);
+        }
+
+        $riwayat = $query->latest()->paginate(10)->withQueryString();
+
+        // Total cuti bulan ini (khusus untuk kartu statistik)
         $cutiBulanIni = $user->cutis()
             ->where('status', 'approved')
-            ->whereMonth('tanggal_mulai', now()->month)
-            ->whereYear('tanggal_mulai', now()->year)
+            ->whereMonth('tanggal_mulai', $bulan)
+            ->whereYear('tanggal_mulai', $tahun)
             ->sum('jumlah_hari');
 
-        $riwayat = $user->cutis()->latest()->paginate(10);
+        return view('karyawan.dashboard', compact('user', 'cutiBulanIni', 'riwayat', 'bulan', 'tahun', 'tanggal'));
+    }
 
-        return view('karyawan.dashboard', compact('user', 'cutiBulanIni', 'riwayat'));
+    /** Dashboard Admin */
+    public function dashboardAdmin(Request $request)
+    {
+        $bulan = $request->input('bulan', now()->month);
+        $tahun = $request->input('tahun', now()->year);
+        $tanggal = $request->input('tanggal');
+
+        // Ambil data pending beserta jumlah cuti user tersebut di bulan yang diajukan
+        $pending = Cuti::with('user')->where('status', 'pending')->latest()->get()->map(function ($cuti) {
+            // Hitung total cuti (pending + approved) milik user ini di bulan cuti tersebut
+            $cutiBulanIni = Cuti::where('user_id', $cuti->user_id)
+                ->whereIn('status', ['pending', 'approved'])
+                ->whereMonth('tanggal_mulai', $cuti->tanggal_mulai->month)
+                ->whereYear('tanggal_mulai', $cuti->tanggal_mulai->year)
+                ->count();
+
+            $cuti->total_cuti_bulan_ini = $cutiBulanIni;
+            return $cuti;
+        });
+
+        // Filter untuk Total Cuti Disetujui Bulan Ini
+        $cutiBulanIni = Cuti::where('status', 'approved')
+            ->whereMonth('tanggal_mulai', $bulan)
+            ->whereYear('tanggal_mulai', $tahun)
+            ->sum('jumlah_hari');
+
+        $belumCuti = \App\Models\User::where('role', 'karyawan')
+            ->whereDoesntHave('cutis', function ($query) {
+                $query->where('status', 'approved');
+            })
+            ->get();
+
+        // Riwayat keseluruhan untuk filter
+        $queryRiwayat = Cuti::with('user')->where('status', 'approved');
+
+        if ($tanggal) {
+            $queryRiwayat->whereDate('tanggal_mulai', $tanggal);
+        } else {
+            $queryRiwayat->whereMonth('tanggal_mulai', $bulan)->whereYear('tanggal_mulai', $tahun);
+        }
+
+        $riwayatDisetujui = $queryRiwayat->latest()->paginate(10)->withQueryString();
+
+        return view('admin.dashboard', compact(
+            'pending',
+            'cutiBulanIni',
+            'belumCuti',
+            'riwayatDisetujui',
+            'bulan',
+            'tahun',
+            'tanggal'
+        ));
     }
 
     /** Dashboard Super Admin */
-    public function dashboardSuperAdmin()
+    public function dashboardSuperAdmin(Request $request)
     {
+        $bulan = $request->input('bulan', now()->month);
+        $tahun = $request->input('tahun', now()->year);
+
         $totalUsers = \App\Models\User::count();
         $totalKaryawan = \App\Models\User::where('role', 'karyawan')->count();
         $totalAdmin = \App\Models\User::whereIn('role', ['admin', 'super_admin'])->count();
+
         $pending = Cuti::where('status', 'pending')->count();
         $approved = Cuti::where('status', 'approved')->count();
         $rejected = Cuti::where('status', 'rejected')->count();
+
+        // Filter Total Cuti Bulan Ini
+        $cutiBulanIni = Cuti::where('status', 'approved')
+            ->whereMonth('tanggal_mulai', $bulan)
+            ->whereYear('tanggal_mulai', $tahun)
+            ->sum('jumlah_hari');
+
+        $belumCutiCount = \App\Models\User::where('role', 'karyawan')
+            ->whereDoesntHave('cutis', function ($query) {
+                $query->where('status', 'approved');
+            })
+            ->count();
 
         $cutiTerbaru = Cuti::with('user')->latest()->take(5)->get();
 
@@ -46,7 +136,11 @@ class CutiController extends Controller
             'pending',
             'approved',
             'rejected',
-            'cutiTerbaru'
+            'cutiBulanIni',
+            'belumCutiCount',
+            'cutiTerbaru',
+            'bulan',
+            'tahun'
         ));
     }
 
@@ -77,6 +171,14 @@ class CutiController extends Controller
             ]);
         }
 
+        // Hitung jumlah pengajuan cuti karyawan ini di bulan yang sama
+        $cutiBulanIni = Cuti::where('user_id', $user->id)
+            ->whereIn('status', ['pending', 'approved'])
+            ->whereMonth('tanggal_mulai', Carbon::parse($validated['tanggal_mulai'])->month)
+            ->whereYear('tanggal_mulai', Carbon::parse($validated['tanggal_mulai'])->year)
+            ->count();
+
+        // Simpan Pengajuan
         Cuti::create([
             'user_id'         => $user->id,
             'tanggal_mulai'   => $validated['tanggal_mulai'],
@@ -85,10 +187,9 @@ class CutiController extends Controller
             'alasan'          => $validated['alasan'] ?? null,
         ]);
 
-        // Hitung sisa setelah pengajuan ini (estimasi, belum dipotong)
+        // --- Susun Pesan Notifikasi WA ---
         $sisaSetelahPengajuan = $user->sisa_cuti_tahunan - $durasi;
 
-        // Susun pesan
         $pesan = "📋 Pengajuan cuti baru\n"
             . "Nama: {$user->name}\n"
             . "Tanggal: {$validated['tanggal_mulai']} s/d {$validated['tanggal_selesai']}\n"
@@ -96,25 +197,32 @@ class CutiController extends Controller
             . "Sisa cuti saat ini: {$user->sisa_cuti_tahunan} hari\n"
             . "Status: Menunggu persetujuan";
 
-        // Tambahkan warning jika sisa cuti menipis atau habis setelah pengajuan
+        // Validasi Notif: Peringatan Batas Bulanan (Cuti ke-2 / lebih)
+        if ($cutiBulanIni == 1) { // Ini adalah cuti ke-2 bulan ini
+            $pesan .= "\n\n⚠️ PERINGATAN BULANAN: Ini adalah pengajuan cuti ke-2 {$user->name} bulan ini. Maksimal hanya 3 kali cuti per bulan.";
+        } elseif ($cutiBulanIni >= 2) { // Ini adalah cuti ke-3 atau lebih
+            $pesan .= "\n\n🚫 PERINGATAN KERAS: Pengajuan cuti ini adalah yang ke-" . ($cutiBulanIni + 1) . " kali bulan ini! Karyawan telah MELEBIHI batas maksimal (3x). Harap tinjau dengan ketat.";
+        }
+
+        // Peringatan sisa cuti tahunan
         if ($sisaSetelahPengajuan <= 0) {
             $pesan .= "\n\n🚫 PERINGATAN: Setelah cuti ini disetujui, sisa cuti {$user->name} akan HABIS. Silakan hubungi BOS.";
         } elseif ($sisaSetelahPengajuan <= 2) {
             $pesan .= "\n\n⚠️ PERINGATAN: Setelah cuti ini disetujui, sisa cuti {$user->name} tinggal {$sisaSetelahPengajuan} hari.";
         }
 
-        // 1. Kirim ke karyawan
+        // Kirim WA ke Karyawan
         if (!empty($user->no_wa)) {
             SendFonnteNotification::dispatch($user->no_wa, $pesan);
         }
 
-        // 2. Kirim ke admin
+        // Kirim WA ke Admin
         $adminWa = Setting::get('fonnte_admin_wa') ?? config('services.fonnte.admin_wa');
         if (!empty($adminWa)) {
             SendFonnteNotification::dispatch($adminWa, $pesan);
         }
 
-        // 3. Kirim ke grup
+        // Kirim WA ke Grup
         $groupWa = Setting::get('fonnte_group_wa')
             ?? config('services.fonnte.group_wa')
             ?? Setting::get('fonnte_admin_group_id')
@@ -124,13 +232,6 @@ class CutiController extends Controller
         }
 
         return back()->with('success', 'Pengajuan cuti berhasil dikirim.');
-    }
-
-    /** Dashboard Admin */
-    public function dashboardAdmin()
-    {
-        $pending = Cuti::with('user')->where('status', 'pending')->latest()->get();
-        return view('admin.dashboard', compact('pending'));
     }
 
     /** Approve Cuti */
