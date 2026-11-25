@@ -12,8 +12,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Daftarkan alias middleware role
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
+        ]);
+
+        // Tambahkan AutoResetCuti ke grup middleware 'web'
+        $middleware->web(append: [
+            \App\Http\Middleware\AutoResetCuti::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

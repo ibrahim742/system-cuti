@@ -185,27 +185,34 @@
                 {{-- Area scroll tabel --}}
                 <div class="custom-scroll overflow-x-auto" style="max-height: 400px;">
                     <table class="w-full text-sm text-left min-w-[600px]">
-                        <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide sticky top-0 z-10">
+                                                <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide sticky top-0 z-10">
                             <tr>
                                 <th class="px-4 sm:px-6 py-3 font-semibold">Tanggal</th>
                                 <th class="px-4 sm:px-6 py-3 font-semibold">Durasi</th>
                                 <th class="px-4 sm:px-6 py-3 font-semibold">Alasan</th>
                                 <th class="px-4 sm:px-6 py-3 font-semibold">Status</th>
+                                <th class="px-4 sm:px-6 py-3 font-semibold text-right">Aksi</th> {{-- KOLOM BARU --}}
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100">
+                                                <tbody class="divide-y divide-slate-100">
                             @forelse($riwayat as $c)
                                 <tr class="hover:bg-slate-50 transition">
+                                    {{-- Kolom 1: Tanggal --}}
                                     <td class="px-4 sm:px-6 py-4 text-slate-700 whitespace-nowrap">
                                         {{ $c->tanggal_mulai->format('d M Y') }} — {{ $c->tanggal_selesai->format('d M Y') }}
                                     </td>
-                                    <td class="px-4 sm:px-6 py-4 text-slate-700 whitespace-nowrap">{{ $c->jumlah_hari }} hari</td>
-
-                                    {{-- KOLOM ALASAN --}}
+                                    
+                                    {{-- Kolom 2: Durasi --}}
+                                    <td class="px-4 sm:px-6 py-4 text-slate-700 whitespace-nowrap">
+                                        {{ $c->jumlah_hari }} hari
+                                    </td>
+                                    
+                                    {{-- Kolom 3: Alasan --}}
                                     <td class="px-4 sm:px-6 py-4 text-slate-600 max-w-[150px] sm:max-w-xs truncate" title="{{ $c->alasan ?? 'Tidak ada alasan' }}">
                                         {{ $c->alasan ?? '-' }}
                                     </td>
-
+                                    
+                                    {{-- Kolom 4: Status --}}
                                     <td class="px-4 sm:px-6 py-4 whitespace-nowrap">
                                         @if($c->status === 'approved')
                                             <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
@@ -221,14 +228,31 @@
                                             </span>
                                         @endif
                                     </td>
+                                    
+                                    {{-- Kolom 5: Aksi Batalkan --}}
+                                    <td class="px-4 sm:px-6 py-4 text-right whitespace-nowrap">
+                                        @if($c->status === 'pending')
+                                            <form action="{{ route('cuti.cancel', $c) }}" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin membatalkan pengajuan cuti ini? Sisa cuti akan dikembalikan.')">
+                                                @csrf
+                                                <button type="submit" class="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                    </svg>
+                                                    Batalkan
+                                                </button>
+                                            </form>
+                                        @else
+                                            <span class="text-xs text-slate-400">-</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="4" class="px-6 py-10 text-center text-slate-400">
+                                    <td colspan="5" class="px-6 py-10 text-center text-slate-400">
                                         <svg class="w-10 h-10 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                         </svg>
-                                        Belum ada pengajuan pada periode ini.
+                                        Belum ada pengajuan.
                                     </td>
                                 </tr>
                             @endforelse
@@ -304,14 +328,14 @@
         }).then(() => { openCutiModal(); });
     </script>
     @endif
-    @if(session('success'))
+        @if(session('warning'))
     <script>
         Swal.fire({
-            icon: 'success',
-            title: 'Berhasil',
-            text: @json(session('success')),
-            confirmButtonText: 'OK',
-            confirmButtonColor: '#2563eb',
+            icon: 'warning',
+            title: 'Peringatan Batas Cuti',
+            text: @json(session('warning')),
+            confirmButtonText: 'Mengerti',
+            confirmButtonColor: '#f59e0b', // Kuning/Oranye
         });
     </script>
     @endif

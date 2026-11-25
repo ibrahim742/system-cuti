@@ -124,4 +124,11 @@ Route::middleware(['auth'])->group(function () {
     // --- Rute Profil (Semua Role) ---
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile.show');
     Route::post('/profile', [ProfileController::class, 'update'])->name('profile.update');
-});
+
+Route::post('/super-admin/reset-cuti-massal', [\App\Http\Controllers\UserController::class, 'resetCutiMassal'])->name('super-admin.reset-cuti');
+
+        Route::post('/cuti/{cuti}/cancel', [CutiController::class, 'cancel'])->name('cuti.cancel');
+
+                Route::get('/super-admin/arsip', [CutiController::class, 'arsipKaryawan'])->name('super-admin.arsip.index');
+
+    });

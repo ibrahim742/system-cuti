@@ -23,16 +23,13 @@ class CutiController extends Controller
         // Filter tanggal (opsional)
         $tanggal = $request->input('tanggal');
 
-        // Query dasar riwayat
-        $query = $user->cutis();
+        // HANYA TAMPILKAN RIWAYAT BULAN INI (Data lama otomatis hilang dari layar)
+        $query = $user->cutis()
+            ->whereMonth('tanggal_mulai', $bulan)
+            ->whereYear('tanggal_mulai', $tahun);
 
         if ($tanggal) {
-            // Jika filter tanggal spesifik dipilih
             $query->whereDate('tanggal_mulai', $tanggal);
-        } else {
-            // Jika filter bulanan
-            $query->whereMonth('tanggal_mulai', $bulan)
-                ->whereYear('tanggal_mulai', $tahun);
         }
 
         $riwayat = $query->latest()->paginate(10)->withQueryString();
@@ -54,16 +51,15 @@ class CutiController extends Controller
         $tahun = $request->input('tahun', now()->year);
         $tanggal = $request->input('tanggal');
 
-        // Ambil data pending beserta jumlah cuti user tersebut di bulan yang diajukan
+        // Ambil data pending beserta TOTAL HARI cuti user tersebut di bulan yang diajukan
         $pending = Cuti::with('user')->where('status', 'pending')->latest()->get()->map(function ($cuti) {
-            // Hitung total cuti (pending + approved) milik user ini di bulan cuti tersebut
-            $cutiBulanIni = Cuti::where('user_id', $cuti->user_id)
+            $totalHariBulanIni = Cuti::where('user_id', $cuti->user_id)
                 ->whereIn('status', ['pending', 'approved'])
                 ->whereMonth('tanggal_mulai', $cuti->tanggal_mulai->month)
                 ->whereYear('tanggal_mulai', $cuti->tanggal_mulai->year)
-                ->count();
+                ->sum('jumlah_hari');
 
-            $cuti->total_cuti_bulan_ini = $cutiBulanIni;
+            $cuti->total_hari_bulan_ini = $totalHariBulanIni;
             return $cuti;
         });
 
@@ -128,6 +124,13 @@ class CutiController extends Controller
             ->count();
 
         $cutiTerbaru = Cuti::with('user')->latest()->take(5)->get();
+        
+        // FITUR BARU: Ambil Data Arsip PDF
+        $arsipCuti = Cuti::with('user')
+            ->whereNotNull('arsip_pdf')
+            ->latest()
+            ->take(10)
+            ->get();
 
         return view('super-admin.dashboard', compact(
             'totalUsers',
@@ -139,9 +142,27 @@ class CutiController extends Controller
             'cutiBulanIni',
             'belumCutiCount',
             'cutiTerbaru',
+            'arsipCuti', // Tambahan fitur PDF
             'bulan',
             'tahun'
         ));
+    }
+
+        /** Halaman Arsip Cuti Karyawan (Khusus Super Admin / Admin) */
+    public function arsipKaryawan(Request $request)
+    {
+        $bulan = $request->input('bulan', now()->month);
+        $tahun = $request->input('tahun', now()->year);
+
+        $arsip = Cuti::with('user')
+            ->whereNotNull('arsip_pdf')
+            ->whereMonth('tanggal_mulai', $bulan)
+            ->whereYear('tanggal_mulai', $tahun)
+            ->latest()
+            ->paginate(10)
+            ->withQueryString();
+
+        return view('super-admin.arsip.index', compact('arsip', 'bulan', 'tahun'));
     }
 
     /** Ajukan Cuti */
@@ -154,16 +175,17 @@ class CutiController extends Controller
         ]);
 
         $user = auth()->user();
-        $durasi = Carbon::parse($validated['tanggal_mulai'])
-            ->diffInDays(Carbon::parse($validated['tanggal_selesai'])) + 1;
+        $mulai = Carbon::parse($validated['tanggal_mulai']);
+        $selesai = Carbon::parse($validated['tanggal_selesai']);
+        $durasi = $mulai->diffInDays($selesai) + 1;
 
-        // Aturan 1: cuti habis
+        // Aturan 1: cuti tahunan habis
         if ($user->sisa_cuti_tahunan <= 0) {
             $pesanHabis = Setting::get('alert_cuti_habis') ?? 'Sisa cuti Anda habis. Silakan hubungi BOS.';
             return back()->withErrors(['msg' => $pesanHabis]);
         }
 
-        // Aturan 2: durasi melebihi sisa
+        // Aturan 2: durasi melebihi sisa cuti tahunan
         if ($durasi > $user->sisa_cuti_tahunan) {
             $pesanMelebihi = Setting::get('alert_melebihi_sisa') ?? 'Durasi cuti melebihi sisa cuti Anda.';
             return back()->withErrors([
@@ -171,12 +193,14 @@ class CutiController extends Controller
             ]);
         }
 
-        // Hitung jumlah pengajuan cuti karyawan ini di bulan yang sama
-        $cutiBulanIni = Cuti::where('user_id', $user->id)
+        // Hitung TOTAL HARI cuti (pending + approved) di BULAN yang sama
+        $totalHariBulanIni = Cuti::where('user_id', $user->id)
             ->whereIn('status', ['pending', 'approved'])
-            ->whereMonth('tanggal_mulai', Carbon::parse($validated['tanggal_mulai'])->month)
-            ->whereYear('tanggal_mulai', Carbon::parse($validated['tanggal_mulai'])->year)
-            ->count();
+            ->whereMonth('tanggal_mulai', $mulai->month)
+            ->whereYear('tanggal_mulai', $mulai->year)
+            ->sum('jumlah_hari');
+
+        $totalHariSetelahPengajuan = $totalHariBulanIni + $durasi;
 
         // Simpan Pengajuan
         Cuti::create([
@@ -187,42 +211,50 @@ class CutiController extends Controller
             'alasan'          => $validated['alasan'] ?? null,
         ]);
 
-        // --- Susun Pesan Notifikasi WA ---
-        $sisaSetelahPengajuan = $user->sisa_cuti_tahunan - $durasi;
+        // POTONG KUOTA TAHUNAN LANGSUNG SAAT PENGAJUAN
+        $user->decrement('sisa_cuti_tahunan', $durasi);
+
+        // --- SUSUN PESAN NOTIFIKASI WA ---
+        $sisaSetelahPengajuan = $user->sisa_cuti_tahunan;
 
         $pesan = "📋 Pengajuan cuti baru\n"
             . "Nama: {$user->name}\n"
             . "Tanggal: {$validated['tanggal_mulai']} s/d {$validated['tanggal_selesai']}\n"
             . "Durasi: {$durasi} hari\n"
-            . "Sisa cuti saat ini: {$user->sisa_cuti_tahunan} hari\n"
-            . "Status: Menunggu persetujuan";
+            . "Status: Menunggu persetujuan\n\n"
+            . "📊 Informasi Cuti:\n"
+            . "- Total cuti bulan ini: {$totalHariSetelahPengajuan} hari (Maks 3)\n"
+            . "- Sisa cuti tahunan: {$sisaSetelahPengajuan} hari\n";
 
-        // Validasi Notif: Peringatan Batas Bulanan (Cuti ke-2 / lebih)
-        if ($cutiBulanIni == 1) { // Ini adalah cuti ke-2 bulan ini
-            $pesan .= "\n\n⚠️ PERINGATAN BULANAN: Ini adalah pengajuan cuti ke-2 {$user->name} bulan ini. Maksimal hanya 3 kali cuti per bulan.";
-        } elseif ($cutiBulanIni >= 2) { // Ini adalah cuti ke-3 atau lebih
-            $pesan .= "\n\n🚫 PERINGATAN KERAS: Pengajuan cuti ini adalah yang ke-" . ($cutiBulanIni + 1) . " kali bulan ini! Karyawan telah MELEBIHI batas maksimal (3x). Harap tinjau dengan ketat.";
+        // Logika Peringatan Berdasarkan Total Hari
+        $statusPeringatan = '';
+        if ($totalHariSetelahPengajuan > 3) {
+            $pesan .= "\n🚫 PERINGATAN KERAS: Pengajuan ini membuat total cuti bulan ini menjadi {$totalHariSetelahPengajuan} hari! Karyawan telah MELEBIHI batas maksimal (3 hari per bulan).";
+            $statusPeringatan = 'danger';
+        } elseif ($totalHariSetelahPengajuan == 3) {
+            $pesan .= "\n⚠️ PERINGATAN: Pengajuan ini membuat total cuti bulan ini menjadi 3 hari. Anda telah mencapai batas maksimal bulan ini.";
+            $statusPeringatan = 'warning';
         }
 
         // Peringatan sisa cuti tahunan
         if ($sisaSetelahPengajuan <= 0) {
-            $pesan .= "\n\n🚫 PERINGATAN: Setelah cuti ini disetujui, sisa cuti {$user->name} akan HABIS. Silakan hubungi BOS.";
+            $pesan .= "\n🚫 PERINGATAN: Sisa cuti tahunan Anda sudah HABIS.";
         } elseif ($sisaSetelahPengajuan <= 2) {
-            $pesan .= "\n\n⚠️ PERINGATAN: Setelah cuti ini disetujui, sisa cuti {$user->name} tinggal {$sisaSetelahPengajuan} hari.";
+            $pesan .= "\n⚠️ PERINGATAN: Sisa cuti tahunan Anda tinggal {$sisaSetelahPengajuan} hari.";
         }
 
-        // Kirim WA ke Karyawan
+        // 1. Kirim ke Karyawan
         if (!empty($user->no_wa)) {
             SendFonnteNotification::dispatch($user->no_wa, $pesan);
         }
 
-        // Kirim WA ke Admin
+        // 2. Kirim ke Admin
         $adminWa = Setting::get('fonnte_admin_wa') ?? config('services.fonnte.admin_wa');
         if (!empty($adminWa)) {
             SendFonnteNotification::dispatch($adminWa, $pesan);
         }
 
-        // Kirim WA ke Grup
+        // 3. Kirim ke Grup
         $groupWa = Setting::get('fonnte_group_wa')
             ?? config('services.fonnte.group_wa')
             ?? Setting::get('fonnte_admin_group_id')
@@ -231,7 +263,66 @@ class CutiController extends Controller
             SendFonnteNotification::dispatch($groupWa, $pesan);
         }
 
+        // Tampilkan peringatan di sistem (SweetAlert)
+        if ($statusPeringatan === 'danger') {
+            return back()->withErrors(['msg' => "PERINGATAN KERAS: Total cuti Anda bulan ini menjadi {$totalHariSetelahPengajuan} hari. Anda sudah melebihi batas maksimal 3 hari per bulan!"]);
+        } elseif ($statusPeringatan === 'warning') {
+            return back()->with('warning', "PERINGATAN: Total cuti Anda bulan ini tepat 3 hari. Anda sudah mencapai batas maksimal bulan ini.");
+        }
+
         return back()->with('success', 'Pengajuan cuti berhasil dikirim.');
+    }
+
+    /** Batalkan Cuti (Oleh Karyawan) */
+    public function cancel(Cuti $cuti)
+    {
+        // Pastikan yang membatalkan adalah pemilik cuti tersebut
+        if ($cuti->user_id !== auth()->id()) {
+            return back()->withErrors(['msg' => 'Anda tidak berhak membatalkan cuti ini.']);
+        }
+
+        // Hanya cuti dengan status pending yang bisa dibatalkan
+        if ($cuti->status !== 'pending') {
+            return back()->withErrors(['msg' => 'Hanya cuti yang belum disetujui yang dapat dibatalkan.']);
+        }
+
+        $user = auth()->user();
+
+        // KEMBALIKAN KUOTA (REFUND) KARENA DIBATALKAN
+        $user->increment('sisa_cuti_tahunan', $cuti->jumlah_hari);
+
+        // Ubah status menjadi rejected atau batalkan (kita gunakan rejected agar terhitung tidak aktif)
+        $cuti->update(['status' => 'rejected']); 
+
+        // --- SUSUN PESAN NOTIFIKASI WA ---
+        $pesanCancel = "🚫 Pembatalan Cuti\n"
+            . "Nama: {$user->name}\n"
+            . "Tanggal: {$cuti->tanggal_mulai->format('d/m/Y')} s/d {$cuti->tanggal_selesai->format('d/m/Y')}\n"
+            . "Durasi: {$cuti->jumlah_hari} hari\n"
+            . "Status: Dibatalkan oleh Karyawan\n"
+            . "Sisa cuti dikembalikan menjadi: {$user->sisa_cuti_tahunan} hari";
+
+        // 1. Ke Karyawan
+        if (!empty($user->no_wa)) {
+            SendFonnteNotification::dispatch($user->no_wa, $pesanCancel);
+        }
+
+        // 2. Ke Admin
+        $adminWa = Setting::get('fonnte_admin_wa') ?? config('services.fonnte.admin_wa');
+        if (!empty($adminWa)) {
+            SendFonnteNotification::dispatch($adminWa, $pesanCancel);
+        }
+
+        // 3. Ke Grup
+        $groupWa = Setting::get('fonnte_group_wa')
+            ?? config('services.fonnte.group_wa')
+            ?? Setting::get('fonnte_admin_group_id')
+            ?? config('services.fonnte.admin_group_id');
+        if (!empty($groupWa)) {
+            SendFonnteNotification::dispatch($groupWa, $pesanCancel);
+        }
+
+        return back()->with('success', 'Pengajuan cuti berhasil dibatalkan. Sisa cuti Anda telah dikembalikan.');
     }
 
     /** Approve Cuti */
@@ -241,50 +332,43 @@ class CutiController extends Controller
             return back()->withErrors(['msg' => 'Cuti ini sudah diproses.']);
         }
 
-        DB::transaction(function () use ($cuti) {
-            $user = $cuti->user;
+        // HANYA UBAH STATUS (Kuota sudah dipotong saat pengajuan)
+        $cuti->update(['status' => 'approved']);
+        
+        $user = $cuti->user;
 
-            if ($cuti->jumlah_hari > $user->sisa_cuti_tahunan) {
-                throw new \Exception('Sisa cuti karyawan tidak mencukupi.');
-            }
+        // --- SUSUN PESAN NOTIFIKASI WA ---
+        $pesanApprove = "✅ Cuti disetujui\n"
+            . "Nama: {$user->name}\n"
+            . "Tanggal: {$cuti->tanggal_mulai->format('d/m/Y')} s/d {$cuti->tanggal_selesai->format('d/m/Y')}\n"
+            . "Durasi: {$cuti->jumlah_hari} hari\n"
+            . "Sisa cuti tersisa: {$user->sisa_cuti_tahunan} hari";
 
-            $user->decrement('sisa_cuti_tahunan', $cuti->jumlah_hari);
-            $cuti->update(['status' => 'approved']);
+        if ($user->sisa_cuti_tahunan <= 0) {
+            $pesanApprove .= "\n\n🚫 PERINGATAN: Sisa cuti {$user->name} sudah HABIS. Silakan hubungi BOS.";
+        } elseif ($user->sisa_cuti_tahunan <= 2) {
+            $pesanApprove .= "\n\n⚠️ PERINGATAN: Sisa cuti {$user->name} tinggal {$user->sisa_cuti_tahunan} hari.";
+        }
 
-            // Pesan persetujuan
-            $pesanApprove = "✅ Cuti disetujui\n"
-                . "Nama: {$user->name}\n"
-                . "Tanggal: {$cuti->tanggal_mulai->format('d/m/Y')} s/d {$cuti->tanggal_selesai->format('d/m/Y')}\n"
-                . "Durasi: {$cuti->jumlah_hari} hari\n"
-                . "Sisa cuti tersisa: {$user->sisa_cuti_tahunan} hari";
+        // 1. Ke Karyawan
+        if (!empty($user->no_wa)) {
+            SendFonnteNotification::dispatch($user->no_wa, $pesanApprove);
+        }
 
-            // Tambahkan warning sesuai kondisi sisa cuti
-            if ($user->sisa_cuti_tahunan <= 0) {
-                $pesanApprove .= "\n\n🚫 PERINGATAN: Sisa cuti {$user->name} sudah HABIS. Tidak bisa mengajukan cuti lagi. Silakan hubungi BOS.";
-            } elseif ($user->sisa_cuti_tahunan <= 2) {
-                $pesanApprove .= "\n\n⚠️ PERINGATAN: Sisa cuti {$user->name} tinggal {$user->sisa_cuti_tahunan} hari. Segera hubungi BOS jika ingin mengajukan cuti tambahan.";
-            }
+        // 2. Ke Admin
+        $adminWa = Setting::get('fonnte_admin_wa') ?? config('services.fonnte.admin_wa');
+        if (!empty($adminWa)) {
+            SendFonnteNotification::dispatch($adminWa, $pesanApprove);
+        }
 
-            // 1. Ke karyawan
-            if (!empty($user->no_wa)) {
-                SendFonnteNotification::dispatch($user->no_wa, $pesanApprove);
-            }
-
-            // 2. Ke admin
-            $adminWa = Setting::get('fonnte_admin_wa') ?? config('services.fonnte.admin_wa');
-            if (!empty($adminWa)) {
-                SendFonnteNotification::dispatch($adminWa, $pesanApprove);
-            }
-
-            // 3. Ke grup
-            $groupWa = Setting::get('fonnte_group_wa')
-                ?? config('services.fonnte.group_wa')
-                ?? Setting::get('fonnte_admin_group_id')
-                ?? config('services.fonnte.admin_group_id');
-            if (!empty($groupWa)) {
-                SendFonnteNotification::dispatch($groupWa, $pesanApprove);
-            }
-        });
+        // 3. Ke Grup
+        $groupWa = Setting::get('fonnte_group_wa')
+            ?? config('services.fonnte.group_wa')
+            ?? Setting::get('fonnte_admin_group_id')
+            ?? config('services.fonnte.admin_group_id');
+        if (!empty($groupWa)) {
+            SendFonnteNotification::dispatch($groupWa, $pesanApprove);
+        }
 
         return back()->with('success', 'Cuti disetujui.');
     }
@@ -292,29 +376,37 @@ class CutiController extends Controller
     /** Reject Cuti */
     public function reject(Cuti $cuti)
     {
-        $cuti->update(['status' => 'rejected']);
+        if ($cuti->status !== 'pending') {
+            return back()->withErrors(['msg' => 'Cuti ini sudah diproses.']);
+        }
 
         $user = $cuti->user;
 
-        // Pesan penolakan (sertakan sisa cuti agar karyawan tahu posisinya)
+        // KEMBALIKAN KUOTA (REFUND) KARENA DITOLAK
+        $user->increment('sisa_cuti_tahunan', $cuti->jumlah_hari);
+
+        // Ubah status
+        $cuti->update(['status' => 'rejected']);
+
+        // --- SUSUN PESAN NOTIFIKASI WA ---
         $pesanReject = "❌ Pengajuan cuti ditolak\n"
             . "Nama: {$user->name}\n"
             . "Tanggal: {$cuti->tanggal_mulai->format('d/m/Y')} s/d {$cuti->tanggal_selesai->format('d/m/Y')}\n"
             . "Durasi: {$cuti->jumlah_hari} hari\n"
-            . "Sisa cuti Anda tetap: {$user->sisa_cuti_tahunan} hari";
+            . "Sisa cuti Anda dikembalikan menjadi: {$user->sisa_cuti_tahunan} hari";
 
-        // 1. Ke karyawan
+        // 1. Ke Karyawan
         if (!empty($user->no_wa)) {
             SendFonnteNotification::dispatch($user->no_wa, $pesanReject);
         }
 
-        // 2. Ke admin
+        // 2. Ke Admin
         $adminWa = Setting::get('fonnte_admin_wa') ?? config('services.fonnte.admin_wa');
         if (!empty($adminWa)) {
             SendFonnteNotification::dispatch($adminWa, $pesanReject);
         }
 
-        // 3. Ke grup
+        // 3. Ke Grup
         $groupWa = Setting::get('fonnte_group_wa')
             ?? config('services.fonnte.group_wa')
             ?? Setting::get('fonnte_admin_group_id')
@@ -323,6 +415,6 @@ class CutiController extends Controller
             SendFonnteNotification::dispatch($groupWa, $pesanReject);
         }
 
-        return back()->with('success', 'Cuti ditolak.');
+        return back()->with('success', 'Cuti ditolak. Sisa cuti karyawan telah dikembalikan.');
     }
 }

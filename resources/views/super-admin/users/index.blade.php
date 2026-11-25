@@ -7,19 +7,37 @@
 @section('content')
 
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm">
-        <div class="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-200 flex items-center justify-between gap-2">
+        
+        {{-- Header Tabel & Tombol Aksi --}}
+        <div class="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
                 <h2 class="text-base sm:text-lg font-semibold text-slate-800">Daftar Akun</h2>
                 <p class="text-xs sm:text-sm text-slate-500 mt-0.5">{{ $users->total() }} akun terdaftar</p>
             </div>
-            <button type="button" onclick="openCreateModal()"
-                    class="inline-flex items-center gap-1.5 sm:gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-lg transition shadow-sm whitespace-nowrap">
-                <svg class="w-4 h-4 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                <span class="sm:hidden">+ Tambah</span>
-                <span class="hidden sm:inline">Tambah Akun</span>
-            </button>
+            
+            {{-- Kumpulan Tombol di Kanan --}}
+            <div class="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                
+                {{-- Tombol Reset Cuti --}}
+                <form action="{{ route('super-admin.reset-cuti') }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin me-reset cuti SELURUH karyawan ke jatah awal?')" class="w-full sm:w-auto">
+                    @csrf
+                    <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm whitespace-nowrap">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Reset Cuti Massal
+                    </button>
+                </form>
+
+                {{-- Tombol Tambah Akun --}}
+                <button type="button" onclick="openCreateModal()"
+                        class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm whitespace-nowrap">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Tambah Akun
+                </button>
+            </div>
         </div>
 
         {{-- Area Tabel dengan Scroll Horizontal di HP --}}

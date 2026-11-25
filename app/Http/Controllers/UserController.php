@@ -108,4 +108,14 @@ class UserController extends Controller
 
         return back()->with('success', "Akun {$user->name} berhasil dibuka kuncinya.");
     }
+
+    public function resetCutiMassal()
+{
+    \App\Models\User::where('role', 'karyawan')->update([
+        'sisa_cuti_tahunan' => \Illuminate\Support\Facades\DB::raw('jatah_cuti_tahunan'),
+        'tahun_cuti_terakhir' => now()->year,
+    ]);
+
+    return back()->with('success', 'Sisa cuti seluruh karyawan berhasil di-reset ke jatah awal tahun ini.');
+}
 }
