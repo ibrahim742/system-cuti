@@ -95,3 +95,5 @@ php artisan serve
 ```
 
 Aplikasi kini dapat diakses melalui browser di `http://127.0.0.1:8000`.
+
+Semoga proyek ini membantu mempermudah pengelolaan cuti dan memberikan nilai tambah bagi tim Anda.
