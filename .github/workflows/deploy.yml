@@ -11,7 +11,7 @@ jobs:
       - name: Ambil kode dari GitHub
         uses: actions/checkout@v4
 
-      - name: Kirim folder public ke public_html
+      - name: Kirim folder public ke itssc.site
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -20,10 +20,9 @@ jobs:
           port: 21
           protocol: ftp
           local-dir: ./public/
-          # Arahkan ke folder itssc.site (bukan dihyaharchery.com)
           server-dir: /public_html/itssc.site/ 
           
-      - name: Kirim seluruh kode Laravel ke folder laravel_app
+      - name: Kirim kode Laravel ke folder laravel_app
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -32,7 +31,6 @@ jobs:
           port: 21
           protocol: ftp
           local-dir: ./
-          # Folder ini akan otomatis dibuat di luar public_html
           server-dir: /laravel_app/
           exclude: |
             **/.git*
