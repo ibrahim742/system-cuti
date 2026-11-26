@@ -20,10 +20,9 @@ jobs:
           port: 21
           protocol: ftp
           local-dir: ./public/
-          # Jalur ini karena FTP sudah dikurung di itssc.site
-          server-dir: ./ 
+          server-dir: /public_html/public_html/itssc.site/ 
           
-      - name: Kirim kode Laravel ke folder laravel_app
+      - name: Kirim kode Laravel ke laravel_app
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -32,8 +31,7 @@ jobs:
           port: 21
           protocol: ftp
           local-dir: ./
-          # Mundur satu folder (../) untuk membuat folder laravel_app sejajar dengan itssc.site
-          server-dir: ../laravel_app/
+          server-dir: /laravel_app/
           exclude: |
             **/.git*
             **/.git*/**
