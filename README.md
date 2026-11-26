@@ -1,6 +1,6 @@
 # 📅 Sistem Cuti Karyawan
 
-Sistem Informasi Manajemen Cuti Karyawan berbasis Web yang dibangun menggunakan **Laravel 13** dan **Tailwind CSS**. Aplikasi ini dirancang untuk mempermudah proses pengajuan, persetujuan, dan pemantauan cuti dengan integrasi notifikasi WhatsApp secara otomatis (via Fonnte), pembuatan Arsip PDF, dan pengaturan dinamis langsung dari dashboard Super Admin.
+Sistem Informasi Manajemen Cuti Karyawan berbasis Web yang dibangun menggunakan **Laravel 11** dan **Tailwind CSS**. Aplikasi ini dirancang untuk mempermudah proses pengajuan, persetujuan, dan pemantauan cuti dengan integrasi notifikasi WhatsApp secara otomatis, serta dilengkapi fitur ekspor PDF.
 
 ![Laravel](https://img.shields.io/badge/Laravel-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)
 ![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
@@ -11,30 +11,30 @@ Sistem Informasi Manajemen Cuti Karyawan berbasis Web yang dibangun menggunakan 
 
 ## ✨ Fitur Utama
 
-Aplikasi ini memiliki 3 level pengguna (Role-Based Access Control) dengan fitur yang disesuaikan:
+Aplikasi ini memiliki 3 level pengguna (Role-Based Access Control) dengan fitur masing-masing:
 
 ### 👨‍💼 1. Karyawan
-- **Dashboard Ringkasan**: Melihat sisa cuti tahunan, cuti terpakai bulan ini, dan riwayat pengajuan.
-- **Pengajuan Cuti**: Form pengajuan dengan validasi otomatis (maksimal 3 hari/bulan dan sisa cuti tahunan).
-- **Pembatalan Cuti**: Karyawan dapat membatalkan pengajuan yang masih berstatus *Pending* (kuota otomatis dikembalikan).
-- **Filter Riwayat**: Menampilkan riwayat berdasarkan bulan atau tanggal tertentu.
-- **Profil**: Ganti foto profil dan ubah password.
-- **Notifikasi WA**: Menerima pesan WhatsApp otomatis saat mengajukan, cuti disetujui, atau ditolak.
+- Dashboard ringkasan sisa cuti tahunan dan cuti terpakai bulan ini.
+- Form pengajuan cuti (tanggal mulai, tanggal selesai, alasan).
+- Validasi otomatis batas maksimal cuti (3 hari/bulan).
+- Melihat riwayat pengajuan dan status (Pending, Disetujui, Ditolak).
+- **Fitur Batalkan Cuti** (khusus status Pending, kuota akan dikembalikan).
+- Halaman profil (ganti foto profil & password).
 
 ### 🧑‍💻 2. Admin / HRD
-- **Dashboard Persetujuan**: Melihat daftar pengajuan cuti yang masuk.
-- **Indikator Peringatan**: Tanda warna (Kuning/Merah) pada tabel jika karyawan mengajukan cuti melebihi batas bulanan.
-- **Approve / Reject**: Tombol persetujuan dan penolakan. Kuota cuti otomatis dikembalikan (refund) jika ditolak.
-- **Data Karyawan**: Melihat daftar karyawan yang belum pernah mengambil cuti.
-- **Filter Riwayat**: Menyaring riwayat cuti yang sudah disetujui.
+- Dashboard persetujuan cuti.
+- Melihat daftar pengajuan pending.
+- Tombol **Setujui** dan **Tolak** (dengan pengembalian kuota otomatis jika ditolak).
+- Melihat indikator peringatan (kuning/merah) jika karyawan mengajukan cuti melebihi batas bulanan.
+- Melihat daftar karyawan yang belum pernah mengambil cuti.
 
 ### 👑 3. Super Admin
-- **Semua fitur Admin**.
-- **Kelola Akun (CRUD)**: Tambah, Edit, Hapus akun Karyawan/Admin. Fitur **Buka Kunci Akun** jika karyawan salah password 5x.
-- **Reset Cuti Massal**: Mereset sisa cuti seluruh karyawan ke jatah awal tahunan sekaligus.
-- **Pengaturan Sistem**: Kustomisasi nama aplikasi, favicon, teks halaman login, dan template pesan peringatan.
-- **Integrasi Fonnte**: Mengatur Token WA, Nomor Admin, dan ID Grup langsung dari Dashboard (tanpa edit `.env`).
-- **Arsip PDF**: Membuat, menyimpan, dan mengunduh rekap cuti karyawan bulan sebelumnya. Link PDF otomatis dikirim ke WA karyawan.
+- Semua fitur Admin.
+- **Kelola Akun**: Tambah, Edit, Hapus akun (Karyawan/Admin/Super Admin) & Buka Kunci Akun.
+- **Reset Cuti Massal**: Mereset sisa cuti seluruh karyawan ke jatah awal tahunan.
+- **Pengaturan Sistem**: Mengatur nama aplikasi, favicon, teks login, dan template pesan peringatan.
+- **Konfigurasi Fonnte**: Mengatur Token Fonnte, Nomor Admin, dan ID Grup via Dashboard.
+- **Arsip PDF**: Mengunduh rekap cuti karyawan bulan sebelumnya (otomatis diarsipkan).
 
 ---
 
@@ -42,10 +42,10 @@ Aplikasi ini memiliki 3 level pengguna (Role-Based Access Control) dengan fitur 
 
 Sebelum menginstal, pastikan komputer Anda sudah terpasang:
 1. **PHP >= 8.2** (Disarankan PHP 8.3)
-2. **Composer**
-3. **Node.js & NPM** (Untuk build aset frontend)
+2. **Composer** (Dependency Manager untuk PHP)
+3. **Node.js & NPM** (Untuk build aset frontend/Tailwind)
 4. **Database**: MySQL / MariaDB (Disarankan via XAMPP/Laragon) atau SQLite.
-5. **Git**
+5. **Git** (Untuk clone repository).
 
 ---
 
@@ -54,7 +54,44 @@ Sebelum menginstal, pastikan komputer Anda sudah terpasang:
 Ikuti langkah-langkah berikut untuk menjalankan aplikasi ini di komputer Anda:
 
 ### 1. Clone Repository
-Buka terminal/CMD, lalu jalankan:
+Buka terminal/CMD, lalu jalankan perintah:
 ```bash
-git clone https://github.com/USERNAME/system-cuti.git
+git clone [https://github.com/USERNAME/system-cuti.git](https://github.com/USERNAME/system-cuti.git)
 cd system-cuti
+```
+
+### 2. Install Dependency & Generate Key
+Install seluruh library PHP yang dibutuhkan dan buat application key:
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+```
+
+### 3. Konfigurasi Database
+Buat database baru di MySQL (misal: `system_cuti`), lalu sesuaikan pengaturan pada file `.env`:
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=system_cuti
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+### 4. Migrasi Database & Storage Link
+Jalankan migrasi tabel beserta data seeder dan hubungkan folder storage:
+```bash
+php artisan migrate:fresh --seed
+php artisan storage:link
+```
+
+### 5. Build Aset Frontend & Jalankan Server
+Compile aset Tailwind CSS dan jalankan server lokal Laravel:
+```bash
+npm install
+npm run build
+php artisan serve
+```
+
+Aplikasi kini dapat diakses melalui browser di `http://127.0.0.1:8000`.
