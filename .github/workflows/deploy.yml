@@ -11,8 +11,7 @@ jobs:
       - name: Ambil kode dari GitHub
         uses: actions/checkout@v4
 
-      # 1. Kirim file inti Laravel ke folder public_html (kecuali folder public)
-      - name: Kirim kode inti Laravel
+      - name: Kirim semua file ke laravel_app
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -21,23 +20,10 @@ jobs:
           port: 21
           protocol: ftp
           local-dir: ./
-          server-dir: /public_html/  # <--- Langsung masuk ke public_html
+          # PERHATIKAN BARIS INI: Kita kirim ke folder bernama laravel_app
+          server-dir: /laravel_app/ 
           exclude: |
             **/.git*
             **/.git*/**
             **/node_modules/**
-            **/vendor/**
             **/.env
-            **/public/**             # <--- Folder public dikecualikan dulu
-
-      # 2. Kirim isi folder public ke dalam public_html (karena domain mengarah ke sini)
-      - name: Kirim isi folder public
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 21
-          protocol: ftp
-          local-dir: ./public/
-          server-dir: /public_html/  # <--- Timpa/tambahkan file public ke public_html
