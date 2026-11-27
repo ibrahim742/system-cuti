@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class SettingController extends Controller
@@ -145,58 +146,144 @@ class SettingController extends Controller
         return back()->withErrors(['msg' => 'Bagian pengaturan tidak dikenali.']);
     }
 
-    /** Export database (SQLite) */
+    /** Export database (MySQL .sql / SQLite .sqlite) */
     public function exportDatabase()
     {
-        $path = database_path('database.sqlite');
+        $connection = config('database.default');
 
-        if (!file_exists($path)) {
-            return back()->withErrors(['msg' => 'File database tidak ditemukan.']);
+        if ($connection === 'sqlite') {
+            $path = config('database.connections.sqlite.database') ?: database_path('database.sqlite');
+
+            if (!file_exists($path)) {
+                return back()->withErrors(['msg' => 'File database SQLite tidak ditemukan.']);
+            }
+
+            return response()->download($path, 'backup-' . now()->format('Ymd-His') . '.sqlite');
         }
 
-        $filename = 'backup-' . now()->format('Ymd-His') . '.sqlite';
+        if ($connection === 'mysql') {
+            $dbName = config('database.connections.mysql.database');
+            $filename = 'backup-' . ($dbName ?: 'mysql') . '-' . now()->format('Ymd-His') . '.sql';
 
-        return response()->download($path, $filename);
+            $sql = "-- Backup Database MySQL: {$dbName}\n";
+            $sql .= "-- Tanggal: " . now()->toDateTimeString() . "\n\n";
+            $sql .= "SET FOREIGN_KEY_CHECKS=0;\n";
+            $sql .= "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n";
+            $sql .= "SET NAMES utf8mb4;\n\n";
+
+            $tables = DB::select('SHOW TABLES');
+
+            foreach ($tables as $tableObj) {
+                $table = array_values((array) $tableObj)[0];
+
+                $createResult = DB::select("SHOW CREATE TABLE `{$table}`");
+                $createSql = $createResult[0]->{'Create Table'} ?? null;
+
+                if ($createSql) {
+                    $sql .= "-- Struktur tabel `{$table}`\n";
+                    $sql .= "DROP TABLE IF EXISTS `{$table}`;\n";
+                    $sql .= $createSql . ";\n\n";
+                }
+
+                $rows = DB::table($table)->get();
+                if ($rows->count() > 0) {
+                    $sql .= "-- Data tabel `{$table}`\n";
+
+                    foreach ($rows as $row) {
+                        $rowArray = (array) $row;
+                        $columns = array_map(fn($col) => "`{$col}`", array_keys($rowArray));
+                        $values = array_map(function ($val) {
+                            if (is_null($val)) {
+                                return 'NULL';
+                            }
+                            if (is_bool($val)) {
+                                return $val ? '1' : '0';
+                            }
+                            if (is_int($val) || is_float($val)) {
+                                return (string) $val;
+                            }
+                            return DB::getPdo()->quote((string) $val);
+                        }, array_values($rowArray));
+
+                        $sql .= "INSERT INTO `{$table}` (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $values) . ");\n";
+                    }
+
+                    $sql .= "\n";
+                }
+            }
+
+            $sql .= "SET FOREIGN_KEY_CHECKS=1;\n";
+
+            return response($sql, 200, [
+                'Content-Type'        => 'application/sql; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            ]);
+        }
+
+        return back()->withErrors(['msg' => 'Koneksi database tidak didukung untuk export otomatis.']);
     }
 
-    /** Import database (SQLite) */
+    /** Import database (SQLite / MySQL .sql) */
     public function importDatabase(Request $request)
     {
         $request->validate([
-            'database_file' => 'required|file|max:51200', // maks 50 MB
+            'database_file' => 'required|file|max:51200',
         ], [
             'database_file.required' => 'Pilih file database terlebih dahulu.',
-            'database_file.max' => 'Ukuran file maksimal 50 MB.',
+            'database_file.max'      => 'Ukuran file maksimal 50 MB.',
         ]);
 
         $file = $request->file('database_file');
         $ext = strtolower($file->getClientOriginalExtension());
+        $connection = config('database.default');
 
-        if (!in_array($ext, ['sqlite', 'db'])) {
-            return back()->withErrors(['msg' => 'File harus berformat .sqlite atau .db']);
+        if ($connection === 'sqlite') {
+            if (!in_array($ext, ['sqlite', 'db'])) {
+                return back()->withErrors(['msg' => 'File harus berformat .sqlite atau .db']);
+            }
+
+            $oldPath = config('database.connections.sqlite.database') ?: database_path('database.sqlite');
+            $backupPath = database_path('database-backup-' . now()->format('Ymd-His') . '.sqlite');
+            if (file_exists($oldPath)) {
+                copy($oldPath, $backupPath);
+            }
+
+            $file->move(dirname($oldPath), basename($oldPath));
+            Artisan::call('config:clear');
+
+            return back()
+                ->with('success', 'Database SQLite berhasil diimpor. Backup lama tersimpan sebagai ' . basename($backupPath))
+                ->with('active_section', 'database');
         }
 
-        // Backup dulu database lama
-        $oldPath = database_path('database.sqlite');
-        $backupPath = database_path('database-backup-' . now()->format('Ymd-His') . '.sqlite');
-        if (file_exists($oldPath)) {
-            copy($oldPath, $backupPath);
+        if ($connection === 'mysql') {
+            if ($ext !== 'sql') {
+                return back()->withErrors(['msg' => 'Untuk database MySQL, pilih file berformat .sql']);
+            }
+
+            $sqlContent = file_get_contents($file->getRealPath());
+            if ($sqlContent === false || trim($sqlContent) === '') {
+                return back()->withErrors(['msg' => 'File .sql kosong atau tidak dapat dibaca.']);
+            }
+
+            DB::unprepared($sqlContent);
+
+            return back()
+                ->with('success', 'File backup MySQL (.sql) berhasil diimpor.')
+                ->with('active_section', 'database');
         }
 
-        // Timpa dengan file baru
-        $file->move(database_path(), 'database.sqlite');
-
-        Artisan::call('config:clear');
-
-        return back()
-            ->with('success', 'Database berhasil diimpor. Backup lama tersimpan sebagai ' . basename($backupPath))
-            ->with('active_section', 'database');
+        return back()->withErrors(['msg' => 'Koneksi database tidak didukung untuk import.']);
     }
 
     /** Helper: update key di .env */
     private function updateEnv(array $data): void
     {
         $envPath = base_path('.env');
+        if (!file_exists($envPath)) {
+            return;
+        }
+
         $content = file_get_contents($envPath);
 
         foreach ($data as $key => $value) {

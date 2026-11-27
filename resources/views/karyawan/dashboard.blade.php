@@ -349,6 +349,42 @@
     </script>
     @endif
 
+    <button id="btnInstallPwa" type="button"
+        class="hidden fixed bottom-4 right-4 z-50 items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg">
+    Install Aplikasi
+</button>
+
+<script>
+    let deferredPrompt = null;
+    const btnInstallPwa = document.getElementById('btnInstallPwa');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        if (btnInstallPwa) {
+            btnInstallPwa.classList.remove('hidden');
+            btnInstallPwa.classList.add('inline-flex');
+        }
+    });
+
+    btnInstallPwa?.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        btnInstallPwa.classList.add('hidden');
+        btnInstallPwa.classList.remove('inline-flex');
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredPrompt = null;
+        if (btnInstallPwa) {
+            btnInstallPwa.classList.add('hidden');
+            btnInstallPwa.classList.remove('inline-flex');
+        }
+    });
+</script>
+
     {{-- Script Modal & Sidebar Toggle --}}
     <script>
         function toggleSidebar() {
