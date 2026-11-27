@@ -6,6 +6,11 @@
     @if(\App\Models\Setting::get('favicon'))
     <link rel="icon" type="image/png" href="{{ Storage::url(\App\Models\Setting::get('favicon')) }}">
     @endif
+    <link rel="manifest" href="{{ asset('manifest.json') }}">
+    <meta name="theme-color" content="#0E8A8F">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="{{ asset('icons/icon-192.png') }}">
     <title>{{ \App\Models\Setting::get('app_name') }} — Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -315,6 +320,43 @@
         </div>
     </div>
 
+    {{-- POPUP CENTER: Install PWA (HP & Desktop) --}}
+    <div id="pwaCenterModal" class="fixed inset-0 z-[1000] hidden items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 text-center">
+            <div class="p-6 space-y-4">
+                <div class="w-16 h-16 mx-auto rounded-2xl bg-slate-50 border border-slate-200 p-2 flex items-center justify-center shadow-sm">
+                    <img src="{{ asset('icons/icon-192.png') }}" alt="Logo Aplikasi" class="w-full h-full object-contain">
+                </div>
+
+                <div class="space-y-1">
+                    <h3 class="text-lg font-bold text-slate-800">
+                        Install {{ \App\Models\Setting::get('app_name', 'Sistem Cuti') }}
+                    </h3>
+                    <p id="pwaModalDesc" class="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                        Pasang aplikasi ke layar utama HP atau perangkatmu agar akses lebih cepat seperti aplikasi asli.
+                    </p>
+                </div>
+
+                <div id="pwaIosHint" class="hidden text-left bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl p-3 space-y-1">
+                    <p class="font-semibold">Cara install di iPhone / iPad (Safari):</p>
+                    <p>1. Ketuk tombol <strong>Share</strong> (ikon kotak panah ke atas) di Safari.</p>
+                    <p>2. Pilih <strong>Add to Home Screen</strong> lalu ketuk <strong>Add</strong>.</p>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2.5 pt-2">
+                    <button id="btnPwaClose" type="button"
+                            class="w-full sm:w-1/2 px-4 py-2.5 text-xs sm:text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                        Nanti Saja
+                    </button>
+                    <button id="btnPwaConfirmInstall" type="button"
+                            class="w-full sm:w-1/2 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-sm transition">
+                        Install Sekarang
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- SweetAlert --}}
     @if(session('success'))
     <script>
@@ -349,41 +391,85 @@
     </script>
     @endif
 
-    <button id="btnInstallPwa" type="button"
-        class="hidden fixed bottom-4 right-4 z-50 items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg">
-    Install Aplikasi
-</button>
-
-<script>
-    let deferredPrompt = null;
-    const btnInstallPwa = document.getElementById('btnInstallPwa');
-
-    window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        if (btnInstallPwa) {
-            btnInstallPwa.classList.remove('hidden');
-            btnInstallPwa.classList.add('inline-flex');
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .catch((err) => console.log('SW gagal:', err));
+            });
         }
-    });
 
-    btnInstallPwa?.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-        deferredPrompt = null;
-        btnInstallPwa.classList.add('hidden');
-        btnInstallPwa.classList.remove('inline-flex');
-    });
+        let deferredPrompt = null;
+        const pwaCenterModal = document.getElementById('pwaCenterModal');
+        const btnPwaConfirmInstall = document.getElementById('btnPwaConfirmInstall');
+        const btnPwaClose = document.getElementById('btnPwaClose');
+        const pwaIosHint = document.getElementById('pwaIosHint');
+        const pwaModalDesc = document.getElementById('pwaModalDesc');
 
-    window.addEventListener('appinstalled', () => {
-        deferredPrompt = null;
-        if (btnInstallPwa) {
-            btnInstallPwa.classList.add('hidden');
-            btnInstallPwa.classList.remove('inline-flex');
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        const isIosSafari = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+
+        function openPwaCenterModal() {
+            if (isStandalone || !pwaCenterModal) return;
+            pwaCenterModal.classList.remove('hidden');
+            pwaCenterModal.classList.add('flex');
         }
-    });
-</script>
+
+        function closePwaCenterModal() {
+            if (!pwaCenterModal) return;
+            pwaCenterModal.classList.add('hidden');
+            pwaCenterModal.classList.remove('flex');
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            if (btnPwaConfirmInstall) {
+                btnPwaConfirmInstall.classList.remove('hidden');
+            }
+            if (pwaIosHint) {
+                pwaIosHint.classList.add('hidden');
+            }
+            setTimeout(() => openPwaCenterModal(), 600);
+        });
+
+        // Fallback panduan khusus iPhone/iPad bila belum mode standalone
+        window.addEventListener('load', () => {
+            if (!isStandalone && isIosSafari) {
+                if (btnPwaConfirmInstall) {
+                    btnPwaConfirmInstall.classList.add('hidden');
+                }
+                if (pwaIosHint) {
+                    pwaIosHint.classList.remove('hidden');
+                }
+                if (pwaModalDesc) {
+                    pwaModalDesc.textContent = 'Ikuti langkah berikut di Safari untuk menambahkan aplikasi ke layar utama HP.';
+                }
+                setTimeout(() => openPwaCenterModal(), 800);
+            }
+        });
+
+        btnPwaConfirmInstall?.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            closePwaCenterModal();
+            deferredPrompt.prompt();
+            await deferredPrompt.userChoice;
+            deferredPrompt = null;
+        });
+
+        btnPwaClose?.addEventListener('click', () => {
+            closePwaCenterModal();
+        });
+
+        pwaCenterModal?.addEventListener('click', function (e) {
+            if (e.target === this) closePwaCenterModal();
+        });
+
+        window.addEventListener('appinstalled', () => {
+            deferredPrompt = null;
+            closePwaCenterModal();
+        });
+    </script>
 
     {{-- Script Modal & Sidebar Toggle --}}
     <script>
@@ -424,7 +510,10 @@
         });
 
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeCutiModal();
+            if (e.key === 'Escape') {
+                closeCutiModal();
+                closePwaCenterModal();
+            }
         });
 
         document.getElementById('cutiForm')?.addEventListener('submit', function(e) {
