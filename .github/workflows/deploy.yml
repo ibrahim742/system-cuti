@@ -2,7 +2,7 @@ name: Deploy ke Jagoan Hosting
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -20,10 +20,10 @@ jobs:
           port: 21
           protocol: ftp
           local-dir: ./
-          server-dir: /public_html/laravel_app/
+          # PERHATIKAN BARIS INI: Kita kirim ke folder bernama laravel_app
+          server-dir: /laravel_app/ 
           exclude: |
             **/.git*
             **/.git*/**
             **/node_modules/**
             **/.env
-            **/public/hot
