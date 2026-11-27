@@ -333,7 +333,7 @@
                         Install {{ \App\Models\Setting::get('app_name', 'Sistem Cuti') }}
                     </h3>
                     <p id="pwaModalDesc" class="text-xs sm:text-sm text-slate-500 leading-relaxed">
-                        Pasang aplikasi ke layar utama HP atau perangkatmu agar akses lebih cepat seperti aplikasi asli.
+                        Pasang aplikasi agar akses lebih cepat.
                     </p>
                 </div>
 
