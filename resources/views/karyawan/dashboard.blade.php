@@ -22,7 +22,6 @@
 <body class="bg-slate-50 min-h-screen flex flex-col">
 
     {{-- Sidebar (Mobile & Desktop) --}}
-    {{-- Defaultnya hidden di HP, muncul saat class 'hidden' dihapus oleh JS --}}
     <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-900 text-white flex-col z-50 hidden lg:flex">
         <div class="flex items-center justify-between px-6 h-16 border-b border-slate-800">
             <div class="flex items-center gap-3">
@@ -89,7 +88,6 @@
                 </button>
                 <div>
                     <h1 class="text-base sm:text-lg font-semibold text-slate-800">Dashboard Karyawan</h1>
-                    {{-- Subjudul disembunyikan di HP --}}
                     <p class="text-xs text-slate-500 hidden sm:block">Selamat datang, {{ auth()->user()->name }}</p>
                 </div>
             </div>
@@ -185,34 +183,30 @@
                 {{-- Area scroll tabel --}}
                 <div class="custom-scroll overflow-x-auto" style="max-height: 400px;">
                     <table class="w-full text-sm text-left min-w-[600px]">
-                                                <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide sticky top-0 z-10">
+                        <thead class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide sticky top-0 z-10">
                             <tr>
                                 <th class="px-4 sm:px-6 py-3 font-semibold">Tanggal</th>
                                 <th class="px-4 sm:px-6 py-3 font-semibold">Durasi</th>
                                 <th class="px-4 sm:px-6 py-3 font-semibold">Alasan</th>
                                 <th class="px-4 sm:px-6 py-3 font-semibold">Status</th>
-                                <th class="px-4 sm:px-6 py-3 font-semibold text-right">Aksi</th> {{-- KOLOM BARU --}}
+                                <th class="px-4 sm:px-6 py-3 font-semibold text-right">Aksi</th>
                             </tr>
                         </thead>
-                                                <tbody class="divide-y divide-slate-100">
+                        <tbody class="divide-y divide-slate-100">
                             @forelse($riwayat as $c)
                                 <tr class="hover:bg-slate-50 transition">
-                                    {{-- Kolom 1: Tanggal --}}
                                     <td class="px-4 sm:px-6 py-4 text-slate-700 whitespace-nowrap">
                                         {{ $c->tanggal_mulai->format('d M Y') }} — {{ $c->tanggal_selesai->format('d M Y') }}
                                     </td>
-                                    
-                                    {{-- Kolom 2: Durasi --}}
+
                                     <td class="px-4 sm:px-6 py-4 text-slate-700 whitespace-nowrap">
                                         {{ $c->jumlah_hari }} hari
                                     </td>
-                                    
-                                    {{-- Kolom 3: Alasan --}}
+
                                     <td class="px-4 sm:px-6 py-4 text-slate-600 max-w-[150px] sm:max-w-xs truncate" title="{{ $c->alasan ?? 'Tidak ada alasan' }}">
                                         {{ $c->alasan ?? '-' }}
                                     </td>
-                                    
-                                    {{-- Kolom 4: Status --}}
+
                                     <td class="px-4 sm:px-6 py-4 whitespace-nowrap">
                                         @if($c->status === 'approved')
                                             <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
@@ -222,17 +216,22 @@
                                             <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
                                                 <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Menunggu
                                             </span>
+                                        @elseif($c->status === 'cancelled')
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Dibatalkan
+                                            </span>
                                         @else
                                             <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700">
                                                 <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Ditolak
                                             </span>
                                         @endif
                                     </td>
-                                    
-                                    {{-- Kolom 5: Aksi Batalkan --}}
+
                                     <td class="px-4 sm:px-6 py-4 text-right whitespace-nowrap">
                                         @if($c->status === 'pending')
-                                            <form action="{{ route('cuti.cancel', $c) }}" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin membatalkan pengajuan cuti ini? Sisa cuti akan dikembalikan.')">
+                                            <form action="{{ route('cuti.cancel', $c) }}" method="POST" class="inline"
+                                                  data-confirm="{{ \App\Models\Setting::get('alert_konfirmasi_batal_cuti') ?: 'Apakah Anda yakin ingin membatalkan pengajuan cuti ini? Sisa cuti akan dikembalikan.' }}"
+                                                  onsubmit="return confirm(this.dataset.confirm)">
                                                 @csrf
                                                 <button type="submit" class="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition">
                                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -317,32 +316,41 @@
     </div>
 
     {{-- SweetAlert --}}
+    @if(session('success'))
+    <script>
+        Swal.fire({
+            icon: 'success',
+            title: 'Berhasil',
+            text: @json(session('success')),
+            confirmButtonColor: '#2563eb',
+        });
+    </script>
+    @endif
     @if($errors->any())
     <script>
         Swal.fire({
             icon: 'error',
-            title: 'Tidak Bisa Mengajukan Cuti',
+            title: @json(\App\Models\Setting::get('alert_judul_gagal_cuti') ?: 'Tidak Bisa Mengajukan Cuti'),
             text: @json($errors->first()),
             confirmButtonText: 'Mengerti',
             confirmButtonColor: '#dc2626',
         }).then(() => { openCutiModal(); });
     </script>
     @endif
-        @if(session('warning'))
+    @if(session('warning'))
     <script>
         Swal.fire({
             icon: 'warning',
-            title: 'Peringatan Batas Cuti',
+            title: @json(\App\Models\Setting::get('alert_judul_batas_bulanan_pas') ?: 'Peringatan Batas Cuti'),
             text: @json(session('warning')),
             confirmButtonText: 'Mengerti',
-            confirmButtonColor: '#f59e0b', // Kuning/Oranye
+            confirmButtonColor: '#f59e0b',
         });
     </script>
     @endif
 
     {{-- Script Modal & Sidebar Toggle --}}
     <script>
-        // Toggle Sidebar HP
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('overlay');
@@ -385,7 +393,9 @@
 
         document.getElementById('cutiForm')?.addEventListener('submit', function(e) {
             const sisaCuti = {{ auth()->user()->sisa_cuti_tahunan }};
-            const alertHabis = @json(\App\Models\Setting::get('alert_cuti_habis') ?? 'Sisa cuti Anda habis.');
+            const alertHabis = @json(\App\Models\Setting::get('alert_cuti_habis') ?: 'Sisa cuti Anda habis.');
+            const alertTanggalTidakValid = @json(\App\Models\Setting::get('alert_tanggal_tidak_valid') ?: 'Tanggal selesai tidak boleh sebelum tanggal mulai.');
+            const alertMelebihiSisa = @json(\App\Models\Setting::get('alert_melebihi_sisa') ?: 'Durasi cuti Anda {durasi} hari, sedangkan sisa cuti Anda hanya {sisa} hari.');
             const mulai = document.getElementById('tanggal_mulai').value;
             const selesai = document.getElementById('tanggal_selesai').value;
 
@@ -396,7 +406,7 @@
 
             if (tglSelesai < tglMulai) {
                 e.preventDefault();
-                Swal.fire({ icon: 'warning', title: 'Tanggal Tidak Valid', text: 'Tanggal selesai tidak boleh sebelum tanggal mulai.', confirmButtonColor: '#f59e0b' });
+                Swal.fire({ icon: 'warning', title: 'Tanggal Tidak Valid', text: alertTanggalTidakValid, confirmButtonColor: '#f59e0b' });
                 return;
             }
 
@@ -414,7 +424,7 @@
                 Swal.fire({
                     icon: 'error',
                     title: 'Melebihi Sisa Cuti',
-                    html: `Durasi cuti Anda <b>${durasi} hari</b>, sedangkan sisa cuti Anda hanya <b>${sisaCuti} hari</b>.`,
+                    text: alertMelebihiSisa.replace('{durasi}', durasi).replace('{sisa}', sisaCuti),
                     confirmButtonColor: '#dc2626'
                 });
                 return;

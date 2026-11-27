@@ -292,7 +292,7 @@ class CutiController extends Controller
         $user->increment('sisa_cuti_tahunan', $cuti->jumlah_hari);
 
         // Ubah status menjadi rejected atau batalkan (kita gunakan rejected agar terhitung tidak aktif)
-        $cuti->update(['status' => 'rejected']); 
+        $cuti->update(['status' => 'cancelled']); 
 
         // --- SUSUN PESAN NOTIFIKASI WA ---
         $pesanCancel = "🚫 Pembatalan Cuti\n"

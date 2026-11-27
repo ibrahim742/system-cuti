@@ -5,76 +5,144 @@ namespace App\Http\Controllers;
 use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class SettingController extends Controller
 {
     public function index()
     {
-        return view('settings.index');
+        return view('super-admin.settings.index');
     }
 
-    //Simpan pengaturan umum, login, alert, fonnte, favicon 
+    /** Simpan pengaturan berdasarkan section (umum, fonnte, alert) */
     public function update(Request $request)
     {
-        $validated = $request->validate([
-            'app_name'             => 'required|string|max:100',
-            'login_title'          => 'required|string|max:150',
-            'login_subtitle'       => 'required|string|max:200',
-            'login_branding_title' => 'required|string|max:200',
-            'login_branding_desc'  => 'required|string|max:300',
-            'favicon'              => 'nullable|image|mimes:png,ico,jpg,jpeg|max:512',
-            'fonnte_token'         => 'nullable|string|max:255',
-            'fonnte_admin_wa'      => 'nullable|string|max:20',
-            'fonnte_group_wa'      => 'nullable|string|max:100',
-            'fonnte_admin_group_id' => 'nullable|string|max:100',
-            'alert_cuti_habis'     => 'required|string|max:255',
-            'alert_melebihi_sisa'  => 'required|string|max:255',
-            'alert_sisa_menipis'   => 'required|string|max:255',
-        ]);
+        $section = $request->input('section');
 
-        // Upload favicon
-        if ($request->hasFile('favicon')) {
-            $old = Setting::get('favicon');
-            if ($old && Storage::disk('public')->exists($old)) {
-                Storage::disk('public')->delete($old);
+        // 1. Bagian Umum & Login
+        if ($section === 'umum') {
+            $validated = $request->validate([
+                'app_name'             => 'required|string|max:100',
+                'login_title'          => 'required|string|max:150',
+                'login_subtitle'       => 'required|string|max:200',
+                'login_branding_title' => 'required|string|max:200',
+                'login_branding_desc'  => 'required|string|max:300',
+                'favicon'              => 'nullable|image|mimes:png,ico,jpg,jpeg|max:512',
+            ]);
+
+            if ($request->hasFile('favicon')) {
+                $old = Setting::get('favicon');
+                if ($old && Storage::disk('public')->exists($old)) {
+                    Storage::disk('public')->delete($old);
+                }
+                $path = $request->file('favicon')->store('favicon', 'public');
+                Setting::set('favicon', $path);
             }
-            $path = $request->file('favicon')->store('favicon', 'public');
-            Setting::set('favicon', $path);
-        }
 
-        // Simpan semua setting teks
-        foreach (
-            [
+            foreach ([
                 'app_name',
                 'login_title',
                 'login_subtitle',
                 'login_branding_title',
                 'login_branding_desc',
+            ] as $key) {
+                Setting::set($key, $validated[$key] ?? null);
+            }
+
+            return back()
+                ->with('success', 'Pengaturan Umum & Login berhasil disimpan.')
+                ->with('active_section', 'umum');
+        }
+
+        // 2. Bagian WhatsApp (Fonnte)
+        if ($section === 'fonnte') {
+            $validated = $request->validate([
+                'fonnte_token'          => 'nullable|string|max:255',
+                'fonnte_admin_wa'       => 'nullable|string|max:20',
+                'fonnte_group_wa'       => 'nullable|string|max:100',
+                'fonnte_admin_group_id' => 'nullable|string|max:100',
+            ]);
+
+            foreach ([
                 'fonnte_token',
                 'fonnte_admin_wa',
                 'fonnte_group_wa',
                 'fonnte_admin_group_id',
+            ] as $key) {
+                Setting::set($key, $validated[$key] ?? null);
+            }
+
+            $this->updateEnv([
+                'FONNTE_TOKEN'          => $validated['fonnte_token'] ?? '',
+                'FONNTE_ADMIN_WA'       => $validated['fonnte_admin_wa'] ?? '',
+                'FONNTE_GROUP_WA'       => $validated['fonnte_group_wa'] ?? '',
+                'FONNTE_ADMIN_GROUP_ID' => $validated['fonnte_admin_group_id'] ?? '',
+            ]);
+
+            Artisan::call('config:clear');
+
+            return back()
+                ->with('success', 'Pengaturan WhatsApp (Fonnte) berhasil disimpan.')
+                ->with('active_section', 'fonnte');
+        }
+
+        // 3. Bagian Pesan Alert
+        if ($section === 'alert') {
+            $alertKeys = [
+                'alert_judul_batas_bulanan_pas',
+                'alert_judul_gagal_cuti',
                 'alert_cuti_habis',
                 'alert_melebihi_sisa',
                 'alert_sisa_menipis',
-            ] as $key
-        ) {
-            Setting::set($key, $validated[$key] ?? null);
+                'alert_cuti_berhasil',
+                'alert_tanggal_tidak_valid',
+                'alert_batas_bulanan_pas',
+                'alert_batas_bulanan_lebih',
+                'alert_konfirmasi_batal_cuti',
+                'alert_cuti_dibatalkan',
+                'alert_batal_bukan_pemilik',
+                'alert_batal_bukan_pending',
+                'alert_cuti_sudah_diproses',
+                'alert_cuti_disetujui',
+                'alert_cuti_ditolak',
+                'alert_login_terkunci',
+                'alert_login_salah_sisa',
+                'alert_login_gagal',
+                'alert_akun_ditambahkan',
+                'alert_akun_diperbarui',
+                'alert_akun_dihapus',
+                'alert_hapus_akun_sendiri',
+                'alert_akun_dibuka',
+                'alert_reset_cuti_massal',
+                'alert_profil_diperbarui',
+                'alert_foto_terlalu_besar',
+                'alert_foto_bukan_gambar',
+                'alert_foto_format_salah',
+                'alert_foto_maksimal',
+                'alert_foto_gagal_upload',
+                'alert_password_minimal',
+                'alert_password_konfirmasi',
+            ];
+
+            $rules = [];
+            foreach ($alertKeys as $key) {
+                $rules[$key] = 'nullable|string|max:500';
+            }
+
+            $validated = $request->validate($rules);
+
+            foreach ($alertKeys as $key) {
+                if ($request->has($key)) {
+                    Setting::set($key, $validated[$key] ?? null);
+                }
+            }
+
+            return back()
+                ->with('success', 'Pengaturan Pesan Alert berhasil disimpan.')
+                ->with('active_section', 'alert');
         }
 
-        // Update .env Fonnte agar langsung terbaca
-        $this->updateEnv([
-            'FONNTE_TOKEN'          => $validated['fonnte_token'] ?? '',
-            'FONNTE_ADMIN_WA'       => $validated['fonnte_admin_wa'] ?? '',
-            'FONNTE_GROUP_WA'       => $validated['fonnte_group_wa'] ?? '',
-            'FONNTE_ADMIN_GROUP_ID' => $validated['fonnte_admin_group_id'] ?? '',
-        ]);
-
-        Artisan::call('config:clear');
-
-        return back()->with('success', 'Pengaturan berhasil disimpan.');
+        return back()->withErrors(['msg' => 'Bagian pengaturan tidak dikenali.']);
     }
 
     /** Export database (SQLite) */
@@ -120,7 +188,9 @@ class SettingController extends Controller
 
         Artisan::call('config:clear');
 
-        return back()->with('success', 'Database berhasil diimpor. Backup lama tersimpan sebagai ' . basename($backupPath));
+        return back()
+            ->with('success', 'Database berhasil diimpor. Backup lama tersimpan sebagai ' . basename($backupPath))
+            ->with('active_section', 'database');
     }
 
     /** Helper: update key di .env */

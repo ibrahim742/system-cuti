@@ -111,6 +111,10 @@
                                     <span class="inline-flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-amber-50 text-amber-700">
                                         <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Menunggu
                                     </span>
+                                @elseif($c->status === 'cancelled')
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-slate-100 text-slate-600">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Dibatalkan
+                                    </span>
                                 @else
                                     <span class="inline-flex items-center gap-1 px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-red-50 text-red-700">
                                         <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Ditolak
