@@ -281,7 +281,7 @@
     <div class="flex items-center justify-between border-b border-slate-200 pb-4 mb-5">
         <div>
             <h2 class="text-base font-semibold text-slate-800">Backup & Restore Database</h2>
-            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">Ekspor atau impor file database SQLite</p>
+            <p class="text-xs sm:text-sm text-slate-500 mt-0.5">Ekspor atau impor file database</p>
         </div>
         <button type="button" onclick="closeAllPanels()" class="text-xs font-medium text-slate-500 hover:text-slate-800 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 transition">
             Tutup

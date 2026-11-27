@@ -32,6 +32,12 @@
             background: radial-gradient(ellipse 45% 55% at 50% 50%, rgba(10,22,40,.85), rgba(10,22,40,0) 100%);
         }
     </style>
+
+    <link rel="manifest" href="{{ asset('manifest.json') }}">
+    <meta name="theme-color" content="#0E8A8F">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="{{ asset('icons/icon-192.png') }}">
 </head>
 <body class="glow bg-navy-900 font-sans antialiased min-h-screen flex items-center justify-center p-4 text-slate-800">
 
@@ -43,6 +49,15 @@
     {{-- Latar: jaringan saraf --}}
     <canvas id="network" class="fixed inset-0 w-full h-full z-0" aria-hidden="true"></canvas>
 
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .catch((err) => console.log('SW gagal:', err));
+            });
+        }
+    </script>
     {{-- Card portrait --}}
     <main class="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-2xl shadow-black/40 px-8 py-10 sm:px-10">
 
